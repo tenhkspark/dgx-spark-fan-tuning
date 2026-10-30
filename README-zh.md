@@ -2,6 +2,11 @@
 
 <sub>`docs/` 下的详细页面为英文；本 README 及其各语言译文包含相同的数字。</sub>
 
+> **其余内容的位置：** 本仓库保留 GPL-2.0 补丁与风扇实测。
+> 时钟下限、推理、路由、补丁、看门狗与最新的基准结果在
+> [`dgx-spark-tuning`](https://github.com/tenhkspark/dgx-spark-tuning)。
+
+
 # 4 节点 DGX Spark 集群风扇曲线说明
 
 四节点 DGX Spark（GB10）集群的风扇实际表现、我们最终采用的曲线，以及会悄悄让风扇停转的固件陷阱。我们运行的服务配方（`christopherowen/spark-ds41f`）不附带风扇设置——风扇控制是上游的另一个项目（`christopherowen/dgx-spark-fan-control`）——所以这些数字放在这里。

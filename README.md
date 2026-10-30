@@ -2,6 +2,12 @@
 
 <sub>The detailed pages under `docs/` are in English; this README and its translations carry the same numbers.</sub>
 
+> **Where the rest lives:** this repository keeps the GPL-2.0 patch and the fan
+> measurements. The cluster's other settings — clock floor, serving, routing, patching,
+> watchdogs and the current benchmark results — are in
+> [`dgx-spark-tuning`](https://github.com/tenhkspark/dgx-spark-tuning).
+
+
 # Fan curve notes for a 4-node DGX Spark cluster
 
 What a four-node DGX Spark (GB10) cluster actually did with its fans, the curve we

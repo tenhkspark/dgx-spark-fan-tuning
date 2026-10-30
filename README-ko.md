@@ -2,6 +2,11 @@
 
 <sub>`docs/` 아래의 상세 페이지는 영어로 되어 있다. 이 README와 번역본은 동일한 수치를 담는다.</sub>
 
+> **나머지가 있는 곳:** 이 저장소는 GPL-2.0 패치와 팬 측정을 보관합니다.
+> 클럭 하한, 서빙, 라우팅, 패치, 워치독과 최신 벤치마크 결과는
+> [`dgx-spark-tuning`](https://github.com/tenhkspark/dgx-spark-tuning)에 있습니다.
+
+
 # 4노드 DGX Spark 클러스터의 팬 커브 노트
 
 4노드 DGX Spark(GB10) 클러스터에서 팬이 실제로 어떻게 동작했는지, 우리가 최종적으로 선택한 커브, 그리고 팬을 조용히 꺼버리는 펌웨어 함정을 정리한다. 우리가 운영하는 서빙 레시피(`christopherowen/spark-ds41f`)는 팬 설정을 포함하지 않는다. 팬 제어는 업스트림의 별도 프로젝트(`christopherowen/dgx-spark-fan-control`)이므로, 이 수치는 이곳에 둔다.
