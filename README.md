@@ -6,6 +6,9 @@
 > measurements. The cluster's other settings — clock floor, serving, routing, patching,
 > watchdogs and the current benchmark results — are in
 > [`dgx-spark-tuning`](https://github.com/tenhkspark/dgx-spark-tuning).
+>
+> **Agents on top:** the egress, audit and ingest controls for an agent running on this cluster
+> live in [`agent-blast-radius`](https://github.com/tenhkspark/agent-blast-radius).
 
 
 # Fan curve notes for a 4-node DGX Spark cluster
