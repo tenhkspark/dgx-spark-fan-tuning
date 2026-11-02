@@ -110,10 +110,22 @@ scripts/fan-snapshot.sh          # state, hottest zone, both fan RPMs, GPU clock
 
 省略该别名需自行承担风险：如果 unit 名称无法解析，上游基准测试会以 `cannot restore fan control` 中止，你将完全得不到测量结果。
 
+## 第二种静默故障：守护进程已死，风扇停在低档
+
+2026-10-31 在我们的一台节点上实测。写入 `cur_state` 超时（`Errno 110`），守护进程以退出码 69
+结束，而上游 unit 带有 `RestartPreventExitStatus=69`，systemd 因此**故意不重启**它。
+EC 把风扇保持在较低的下限（3780 / 5400 RPM，健康节点为 9000 / 12690），GPU 稳定在 66 °C，
+最热温区 73 °C——**低于全部三个告警阈值**，于是 1 天 19 小时没有任何告警。
+执行 `systemctl restart dgx-fan-daemon` 后，一分钟内恢复到约 7,200 RPM、63 °C。
+
+`deploy/` 中的 unit 从未包含该行（它使用 `Restart=always`），而
+`scripts/thermal-watch.sh` 现在会在 **unit 不是 `active` 时**就告警。
+验证：`systemctl show -p Restart -p RestartPreventExitStatus dgx-fan-daemon`，第二个值必须为空。
+
 ## 监控
 
 - `scripts/fan-snapshot.sh` — 只读的一次性快照：请求状态、最热温区、`fan1_input`/`fan2_input`、GPU 温度/频率/功耗。可从 cron 安全运行。
-- `scripts/thermal-watch.sh` — 当 ACPI ≥ 78 °C、GPU ≥ 75 °C，或**当前**风扇状态读数为 0 时告警。配置项是文件顶部的环境变量（主机列表、ssh 用户、告警文件）。应依据实时状态判断，而不是 `dmesg` 中的 `baseline fan1=` 行：在我们的一台机器上，风扇正常运行时基线却被记录为 0，从而产生了误报。
+- `scripts/thermal-watch.sh` — 当守护进程 unit 不是 `active`、ACPI ≥ 78 °C、GPU ≥ 75 °C，或**当前**风扇状态读数为 0 时告警。配置项是文件顶部的环境变量（主机列表、ssh 用户、告警文件、unit 名称）。应依据实时状态判断，而不是 `dmesg` 中的 `baseline fan1=` 行：在我们的一台机器上，风扇正常运行时基线却被记录为 0，从而产生了误报。
 
 ## 兼容性说明
 

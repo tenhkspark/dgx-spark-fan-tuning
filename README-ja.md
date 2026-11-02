@@ -136,12 +136,27 @@ scripts/fan-snapshot.sh          # state・最高温ゾーン・2つのファン
 別名を省くのは自己責任で。ユニット名が解決しないと、上流のベンチは
 `cannot restore fan control`で中止し、測定結果が1つも出ません。
 
+## もうひとつの静かな故障: デーモンが死んで、ファンは低いまま回る
+
+2026-10-31 に私たちの1台で実測しました。`cur_state` への書き込みがタイムアウト
+（`Errno 110`）してデーモンが終了コード69で落ち、上流のユニットが持つ
+`RestartPreventExitStatus=69` により systemd は**わざと再起動しません**でした。
+ECはファンを低い床状態に保ち（3780 / 5400 RPM、健全な台は 9000 / 12690）、GPUは66 °C、
+最高温ゾーンは73 °C——**3つの警報しきい値すべての下**なので、1日19時間なにも鳴りませんでした。
+`systemctl restart dgx-fan-daemon` で約7,200 RPM・63 °Cへ1分以内に戻りました。
+
+`deploy/` のユニットは元からその行を持たず（`Restart=always`）、
+`scripts/thermal-watch.sh` は**ユニットが `active` でない時点**で警報するようにしました。
+確認は `systemctl show -p Restart -p RestartPreventExitStatus dgx-fan-daemon`、
+2つ目の値が空であること。
+
 ## 監視
 
 - `scripts/fan-snapshot.sh` — 読み取り専用の1回実行: 要求state、最高温ゾーン、
   `fan1_input`/`fan2_input`、GPU温度/クロック/電力。cronから回しても安全。
-- `scripts/thermal-watch.sh` — ACPI ≥ 78 °C、GPU ≥ 75 °C、または**現行**のファンstateが0で
-  警報。設定はファイル冒頭の環境変数（ホスト一覧・sshユーザー・警報ファイル）。
+- `scripts/thermal-watch.sh` — デーモンのユニットが`active`でない場合、ACPI ≥ 78 °C、
+  GPU ≥ 75 °C、または**現行**のファンstateが0で警報。設定はファイル冒頭の環境変数
+  （ホスト一覧・sshユーザー・警報ファイル・ユニット名）。
   判定は`dmesg`の`baseline fan1=`行ではなく、動いているstateで行ってください。私たちの1台は
   ファンが正常に回っていてもbaselineが0と記録され、誤報の原因になりました。
 

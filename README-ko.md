@@ -110,10 +110,23 @@ scripts/fan-snapshot.sh          # state, hottest zone, both fan RPMs, GPU clock
 
 별칭을 생략하면 책임은 본인에게 있다. 유닛 이름이 해석되지 않으면 업스트림 벤치마크는 `cannot restore fan control`과 함께 중단되고, 측정값은 전혀 얻지 못한다.
 
+## 두 번째 조용한 고장: 데몬이 죽고 팬은 낮은 상태로 계속 돈다
+
+2026-10-31 우리 노드 하나에서 실측했다. `cur_state` 쓰기가 타임아웃(`Errno 110`)되어
+데몬이 종료 코드 69로 죽었고, 업스트림 유닛의 `RestartPreventExitStatus=69` 때문에 systemd는
+**재시작하지 않도록** 설정되어 있었다. EC는 팬을 낮은 하한에 붙잡아 두었고
+(3780 / 5400 RPM, 정상 노드는 9000 / 12690), GPU는 66 °C, 가장 뜨거운 영역은 73 °C였다 —
+**세 경보 임계값 모두 아래**였으므로 1일 19시간 동안 아무 경보도 울리지 않았다.
+`systemctl restart dgx-fan-daemon`으로 약 7,200 RPM, 63 °C로 1분 안에 돌아왔다.
+
+`deploy/`의 유닛은 처음부터 그 줄이 없었고(`Restart=always`),
+`scripts/thermal-watch.sh`는 이제 **유닛이 `active`가 아닌 시점**에 경보한다.
+확인: `systemctl show -p Restart -p RestartPreventExitStatus dgx-fan-daemon` — 두 번째 값이 비어 있어야 한다.
+
 ## 모니터링
 
 - `scripts/fan-snapshot.sh` — 읽기 전용 1회 실행: 요청 상태, 가장 뜨거운 열 영역, `fan1_input`/`fan2_input`, GPU 온도/클록/전력. cron에서 실행해도 안전하다.
-- `scripts/thermal-watch.sh` — ACPI ≥ 78 °C, GPU ≥ 75 °C 또는 **현재** 팬 상태가 0으로 읽힐 때 알람을 발생시킨다. 설정은 파일 상단의 환경 변수다(호스트 목록, ssh 사용자, 알람 파일). `dmesg`의 `baseline fan1=` 줄이 아니라 실시간 상태를 기준으로 판단해야 한다. 우리 장비 중 하나에서는 팬이 정상 동작 중인데도 기준선이 0으로 기록되어 거짓 알람이 발생했다.
+- `scripts/thermal-watch.sh` — 데몬 유닛이 `active`가 아닐 때, ACPI ≥ 78 °C, GPU ≥ 75 °C 또는 **현재** 팬 상태가 0으로 읽힐 때 알람을 발생시킨다. 설정은 파일 상단의 환경 변수다(호스트 목록, ssh 사용자, 알람 파일, 유닛 이름). `dmesg`의 `baseline fan1=` 줄이 아니라 실시간 상태를 기준으로 판단해야 한다. 우리 장비 중 하나에서는 팬이 정상 동작 중인데도 기준선이 0으로 기록되어 거짓 알람이 발생했다.
 
 ## 호환성 참고 사항
 

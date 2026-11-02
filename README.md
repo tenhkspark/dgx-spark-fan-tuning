@@ -143,13 +143,27 @@ scripts/fan-snapshot.sh          # state, hottest zone, both fan RPMs, GPU clock
 Leave the alias out at your own risk: if the unit name does not resolve, the upstream
 benchmark aborts with `cannot restore fan control` and you get no measurement at all.
 
+## A second silent mode: the daemon dies, the fans keep a floor
+
+Measured 2026-10-31 on one of our nodes. The daemon exited 69 after a `cur_state` write
+timed out (`Errno 110`), and the upstream unit carries `RestartPreventExitStatus=69`, so
+systemd deliberately did **not** restart it. The EC kept the fans at a low floor
+(3780 / 5400 RPM, where healthy nodes read 9000 / 12690), the GPU settled at 66 °C and the
+hottest zone at 73 °C — **below all three alarm thresholds**, so nothing fired for
+1 d 19 h. `systemctl restart dgx-fan-daemon` restored ~7,200 RPM and 63 °C within a minute.
+
+`deploy/` never carried that line (it uses `Restart=always`), and `scripts/thermal-watch.sh`
+now alarms when the unit is not `active`, before any temperature threshold is reached.
+Verify with `systemctl show -p Restart -p RestartPreventExitStatus dgx-fan-daemon`; the
+second field must be empty.
+
 ## Monitoring
 
 - `scripts/fan-snapshot.sh` — read-only one-shot: requested state, hottest thermal zone,
   `fan1_input`/`fan2_input`, GPU temperature/clock/power. Safe to run from cron.
-- `scripts/thermal-watch.sh` — alarm when ACPI ≥ 78 °C, GPU ≥ 75 °C, or the **current**
-  fan state reads 0. Configuration is environment variables at the top of the file
-  (host list, ssh user, alert file). Judge on the live state, not on the `baseline fan1=`
+- `scripts/thermal-watch.sh` — alarm when the daemon unit is not `active`, when
+  ACPI ≥ 78 °C, GPU ≥ 75 °C, or the **current** fan state reads 0. Configuration is
+  environment variables at the top of the file (host list, ssh user, alert file, unit name). Judge on the live state, not on the `baseline fan1=`
   line in `dmesg`: on one of our units the baseline is logged as 0 while the fans are
   running normally, which produced false alarms.
 

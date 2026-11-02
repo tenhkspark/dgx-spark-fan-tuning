@@ -7,9 +7,10 @@
 #   ./thermal-watch.sh
 #
 # Alarm conditions
-#   1. hottest ACPI thermal zone >= ACPI_LIMIT  (default 78 °C)
-#   2. GPU temperature        >= GPU_LIMIT      (default 75 °C)
-#   3. current fan state == 0                   (0 RPM / EC control lost)
+#   1. the fan-floor daemon is not `active`          (silent death, see README)
+#   2. hottest ACPI thermal zone >= ACPI_LIMIT  (default 78 °C)
+#   3. GPU temperature        >= GPU_LIMIT      (default 75 °C)
+#   4. current fan state == 0                   (0 RPM / EC control lost)
 #      — only if the controller cannot be read do we fall back to the
 #        `baseline fan1=` value from dmesg, which is 0 on some units while the
 #        fans are running fine and therefore false-alarms.
@@ -25,6 +26,7 @@ ACPI_LIMIT=${ACPI_LIMIT:-78}
 GPU_LIMIT=${GPU_LIMIT:-75}
 COOLDOWN=${COOLDOWN:-1800}
 CTL=${CTL:-/usr/local/sbin/dgx-fan-control}
+UNIT=${UNIT:-dgx-fan-daemon}
 SSH_OPTS=${SSH_OPTS:-"-o BatchMode=yes -o ConnectTimeout=5"}
 
 [ -n "$NODES" ] || { echo "set NODES=\"host1 host2 ...\" (ssh targets)" >&2; exit 0; }
@@ -39,7 +41,8 @@ for node in $NODES; do
     a=\$(for z in /sys/class/thermal/thermal_zone*/temp; do [ -r \"\$z\" ] && echo \$(( \$(cat \$z 2>/dev/null || echo 0) / 1000 )); done | sort -rn | head -1)
     b=\$(sudo -n dmesg 2>/dev/null | grep -o 'baseline fan1=[0-9]*' | tail -1 | cut -d= -f2)
     s=\$(timeout 10 sudo -n $CTL status 2>/dev/null | sed -n 's/^state=\([0-9]*\)\/.*/\1/p')
-    echo \"gpu=\${g:-NA} acpi=\${a:-NA} fanbase=\${b:-NA} fanstate=\${s:-NA}\"
+    u=\$(systemctl is-active $UNIT 2>/dev/null | head -1)
+    echo \"gpu=\${g:-NA} acpi=\${a:-NA} fanbase=\${b:-NA} fanstate=\${s:-NA} unit=\${u:-NA}\"
   " 2>/dev/null)
   [ -n "$out" ] || continue
 
@@ -47,9 +50,16 @@ for node in $NODES; do
   acpi=$(printf '%s' "$out" | sed -n 's/.*acpi=\([0-9NA]*\).*/\1/p')
   fb=$(printf '%s' "$out" | sed -n 's/.*fanbase=\([0-9NA]*\).*/\1/p')
   fs=$(printf '%s' "$out" | sed -n 's/.*fanstate=\([0-9NA]*\).*/\1/p')
+  un=$(printf '%s' "$out" | sed -n 's/.*unit=\([a-z-]*\).*/\1/p')
 
   reason=""
-  case "$acpi" in ''|*[!0-9]*) : ;; *) [ "$acpi" -ge "$ACPI_LIMIT" ] && reason="ACPI ${acpi}C" ;; esac
+  # A dead daemon leaves the EC at a low floor, not at 0 RPM, so the temperature
+  # and fan-state thresholds can all be satisfied while control is gone.
+  case "$un" in
+    active) : ;;
+    *) reason="fan daemon not active (${un:-NA})" ;;
+  esac
+  case "$acpi" in ''|*[!0-9]*) : ;; *) [ "$acpi" -ge "$ACPI_LIMIT" ] && reason="${reason:+$reason / }ACPI ${acpi}C" ;; esac
   case "$gpu"  in ''|*[!0-9]*) : ;; *) [ "$gpu"  -ge "$GPU_LIMIT"  ] && reason="${reason:+$reason / }GPU ${gpu}C" ;; esac
   case "$fs" in
     ''|*[!0-9]*)
@@ -64,8 +74,8 @@ for node in $NODES; do
   last=$(grep "^$node " "$STATE_FILE" 2>/dev/null | awk '{print $2}' | tail -1)
   if [ -n "$last" ] && [ $((NOW - last)) -lt "$COOLDOWN" ]; then continue; fi
   echo "$node $NOW" >> "$STATE_FILE"
-  printf '[%s] THERMAL %s: %s (gpu=%s acpi=%s fanbase=%s fanstate=%s)\n' \
-    "$(date '+%F %T')" "$node" "$reason" "$gpu" "$acpi" "$fb" "$fs" >> "$ALERT_FILE"
+  printf '[%s] THERMAL %s: %s (gpu=%s acpi=%s fanbase=%s fanstate=%s unit=%s)\n' \
+    "$(date '+%F %T')" "$node" "$reason" "$gpu" "$acpi" "$fb" "$fs" "${un:-NA}" >> "$ALERT_FILE"
 done
 
 # drop cooldown entries older than a day
